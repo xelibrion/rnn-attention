@@ -1,0 +1,34 @@
+channels:
+- conda-forge
+- defaults
+- soumith
+dependencies:
+- flake8
+- ipython
+- jupyter
+- matplotlib
+- numpy
+- pandas
+- pip
+- pyflakes
+- python=3.6
+- seaborn
+- scikit-learn
+- pyyaml
+- mkl
+- setuptools
+- cmake
+- gcc
+- cffi
+- tqdm
+- quandl
+- pytorch
+- torchvision
+- pip:
+  - autoflake
+  - autopep8
+  - elpy
+  - rope
+  - importmagic
+  - yapf
+  - kaggle-cli

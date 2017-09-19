@@ -1,0 +1,4 @@
+*.pkl
+/.venv
+*.tar
+src/logs
