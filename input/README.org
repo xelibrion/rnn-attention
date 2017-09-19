@@ -1,0 +1,6 @@
+* How to get the data
+
+#+BEGIN_SRC sh :results silent
+wget http://www.manythings.org/anki/rus-eng.zip
+unzip -o rus-eng.zip
+#+END_SRC

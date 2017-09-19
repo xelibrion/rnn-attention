@@ -2,3 +2,5 @@
 /.venv
 *.tar
 src/logs
+/input/*.zip
+/input/*.txt
