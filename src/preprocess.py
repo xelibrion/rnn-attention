@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import re
+import numpy as np
 import pandas as pd
-import torch
 
 SOS_TOKEN = 0
 EOS_TOKEN = 1
@@ -69,7 +69,7 @@ def normalize_string(s):
     return s
 
 
-def get_data():
+def get_pairs():
     df = pd.read_csv(
         '../input/rus.txt',
         sep='\t',
@@ -99,9 +99,6 @@ def get_data():
     return in_lang, out_lang, pairs
 
 
-in_lang, out_lang, pairs = get_data()
-
-
 def sentence_to_indices(sentence, lang):
     return [lang[word] for word in sentence.split(' ')] + [EOS_TOKEN]
 
@@ -118,7 +115,7 @@ def pad_sequence(sequence):
     return sequence, lengths
 
 
-def to_tensor(in_lang, out_lang, pairs):
+def to_numpy_tensor_pair(in_lang, out_lang, pairs):
     in_seq = [sentence_to_indices(in_text, in_lang) for in_text, _ in pairs]
     in_padded_seq, in_lengths = pad_sequence(in_seq)
 
@@ -127,4 +124,4 @@ def to_tensor(in_lang, out_lang, pairs):
     ]
     out_padded_seq, out_lengths = pad_sequence(out_seq)
 
-    return torch.LongTensor(in_padded_seq), torch.LongTensor(out_padded_seq)
+    return np.array(in_padded_seq), np.array(out_padded_seq)

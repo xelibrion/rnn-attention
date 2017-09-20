@@ -1,5 +1,6 @@
+import torch
 import torch.nn as nn
-import torch.functional as F
+import torch.nn.functional as F
 
 
 class EncoderRNN(nn.Module):
@@ -17,6 +18,9 @@ class EncoderRNN(nn.Module):
         for i in range(self.n_layers):
             output, hidden = self.gru(output, hidden)
         return output, hidden
+
+    def init_hidden(self):
+        return torch.zeros(1, 1, self.hidden_size)
 
 
 class DecoderRNN(nn.Module):

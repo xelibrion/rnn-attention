@@ -56,18 +56,24 @@ class Emitter:
 
 class Tuner:
     def __init__(self,
-                 model,
+                 encoder,
+                 decoder,
+                 encoder_optimizer,
+                 decoder_optimizer,
                  criterion,
-                 optimizer,
+                 max_length,
                  epochs=200,
                  early_stopping=None,
                  tag=None):
-        self.model = model
+        self.encoder = encoder
+        self.decoder = decoder
+        self.encoder_optimizer = encoder_optimizer
+        self.decoder_optimizer = decoder_optimizer
         self.criterion = criterion
-        self.optimizer = optimizer
         self.epochs = epochs
         self.early_stopping = early_stopping
         self.start_epoch = 0
+        self.max_length = max_length
         self.best_score = -float('Inf')
         self.tag = tag
         self.h_state = None
@@ -111,37 +117,35 @@ class Tuner:
 
     def train_nnet(self, train_loader, val_loader):
 
-        scheduler = ReduceLROnPlateau(
-            self.optimizer,
-            'max',
-            threshold_mode='rel',
-            threshold=0.002,
-            patience=3,
-            min_lr=1e-7,
-            verbose=True, )
-
         for epoch in range(self.start_epoch, self.epochs):
-            self.train_epoch(train_loader, self.optimizer, epoch, 'training',
-                             'Epoch #{epoch}')
+            self.train_epoch(
+                train_loader,
+                epoch,
+                'training',
+                'Epoch #{epoch}', )
 
-            val_score = self.validate(val_loader, epoch, 'validation',
-                                      'Validating #{epoch}')
+            # val_score = self.validate(
+            #     val_loader,
+            #     epoch,
+            #     'validation',
+            #     'Validating #{epoch}', )
 
             # scheduler.step(val_score)
 
-            if self.early_stopping:
-                if self.early_stopping.should_trigger(
-                        epoch,
-                        val_score, ):
-                    break
+            # if self.early_stopping:
+            #     if self.early_stopping.should_trigger(
+            #             epoch,
+            #             val_score, ):
+            #         break
 
-            self.save_checkpoint(val_score, epoch)
+            # self.save_checkpoint(val_score, epoch)
 
-    def train_epoch(self, train_loader, optimizer, epoch, stage, format_str):
+    def train_epoch(self, train_loader, epoch, stage, format_str):
         batch_time = AverageMeter()
         losses = AverageMeter()
 
-        self.model.train()
+        self.encoder.train()
+        self.decoder.train()
 
         tq = tqdm(total=len(train_loader))
         description = format_str.format(**locals())
@@ -153,19 +157,52 @@ class Tuner:
         for i, (inputs, target) in enumerate(train_loader):
             batch_idx += 1
 
+            loss = 0
+
+            input_length = inputs.size(1)
+            target_length = target.size(1)
+
             input_var = as_variable(inputs)
             target_var = as_variable(target)
 
-            output, h_state = self.model(input_var, None)
-            loss = self.criterion(output, target_var)
-            self.h_state = h_state
+            encoder_hidden = as_variable(self.encoder.init_hidden())
+            encoder_outputs = as_variable(
+                torch.zeros(self.max_length, self.encoder.hidden_size))
+
+            for ei in range(input_length):
+                encoder_output, encoder_hidden = self.encoder(
+                    input_var[0, ei], encoder_hidden)
+                encoder_outputs[ei] = encoder_output[0][0]
+
+            SOS_TOKEN = 0
+            EOS_TOKEN = 1
+
+            decoder_input = as_variable(torch.LongTensor([[SOS_TOKEN]]))
+            decoder_hidden = encoder_hidden
+
+            for di in range(target_length):
+                decoder_output, decoder_hidden = self.decoder(
+                    decoder_input,
+                    decoder_hidden, )
+                topv, topi = decoder_output.data.topk(1)
+                ni = topi[0][0]
+
+                decoder_input = as_variable(torch.LongTensor([[ni]]))
+
+                loss += self.criterion(decoder_output, target_var[0, di])
+                if ni == EOS_TOKEN:
+                    break
 
             batch_size = inputs.size(0)
             losses.update(loss.data[0], batch_size)
 
-            optimizer.zero_grad()
+            self.decoder_optimizer.zero_grad()
+            self.encoder_optimizer.zero_grad()
+
             loss.backward()
-            optimizer.step()
+
+            self.decoder_optimizer.step()
+            self.encoder_optimizer.step()
 
             batch_time.update(time.time() - end)
 

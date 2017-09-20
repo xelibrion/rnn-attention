@@ -9,13 +9,10 @@ import torch.nn.parallel
 import torch.optim
 import torch.utils.data
 
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.externals import joblib
-from pathlib import Path
-import quandl
-
 from model_tuner import Tuner
-from time_series import RNN
+from preprocess import get_pairs, to_numpy_tensor_pair
+from sklearn.model_selection import train_test_split
+from rnn import EncoderRNN, DecoderRNN
 
 
 def define_args():
@@ -77,57 +74,52 @@ def define_args():
     return parser
 
 
-def create_model(initial_lr):
-    model = RNN()
+HIDDEN_SIZE = 256
+
+
+def create_encoder(in_vocabulary_size):
+    model = EncoderRNN(in_vocabulary_size, HIDDEN_SIZE)
+    return model, model.parameters()
+
+
+def create_decoder(out_vocabulary_size):
+    model = DecoderRNN(HIDDEN_SIZE, out_vocabulary_size)
     return model, model.parameters()
 
 
 def create_data_pipeline(args):
     print("Loading data")
 
-    if Path('./AMD.pkl').exists():
-        data_df = joblib.load('./AMD.pkl')
-    else:
-        data_df = quandl.get("WIKI/AMD")
-        joblib.dump(data_df, './AMD.pkl')
+    in_lang, out_lang, pairs = get_pairs()
+    X, y = to_numpy_tensor_pair(in_lang, out_lang, pairs)
 
-    data_df = data_df[[x for x in data_df.columns if 'adj' in x.lower()]]
-    data_df.columns = [
-        x.lower().replace('.', '').replace(' ', '_') for x in data_df.columns
-    ]
+    X_train, X_test, y_train, y_test = train_test_split(
+        X,
+        y,
+        test_size=.2,
+        random_state=42, )
 
-    scaler = MinMaxScaler()
-
-    close = data_df.loc['2014-01-01':, 'adj_close']
-
-    df = data_df.loc['2014-01-01':, :].copy()
-    df['y'] = close.diff(-5).dropna()
-    df['y'] = (df['y'] > 0.0).astype(int)
-    df.dropna(inplace=True)
-
-    X = scaler.fit_transform(df.iloc[:, :-1])
-
-    X_train = X[:-50, :]
-    X_test = X[-50:, :]
-    y_train = df['y'].values[:-50]
-    y_test = df['y'].values[-50:]
+    print(X_train.shape)
+    print(X_test.shape)
+    print(y_train.shape)
+    print(y_test.shape)
 
     train_set = torch.utils.data.TensorDataset(
-        torch.from_numpy(X_train).float().view(1, len(X_train), -1),
-        torch.from_numpy(y_train).float().view(1, len(y_train), 1))
+        torch.from_numpy(X_train),
+        torch.from_numpy(y_train), )
     train_loader = torch.utils.data.DataLoader(
         train_set,
-        batch_size=5,
+        batch_size=args.batch_size,
         shuffle=False, )
     val_set = torch.utils.data.TensorDataset(
-        torch.from_numpy(X_test).float().view(1, len(X_test), -1),
-        torch.from_numpy(y_test).float().view(1, len(y_test), 1))
+        torch.from_numpy(X_test),
+        torch.from_numpy(y_test), )
     val_loader = torch.utils.data.DataLoader(
         val_set,
         batch_size=args.batch_size,
         shuffle=False, )
 
-    return train_loader, val_loader
+    return train_loader, val_loader, in_lang, out_lang
 
 
 def main():
@@ -136,21 +128,28 @@ def main():
 
     cudnn.benchmark = True
 
-    model, full_params = create_model(args.lr)
-    criterion = torch.nn.BCELoss()
+    train_loader, val_loader, in_lang, out_lang = create_data_pipeline(args)
+
+    encoder, encoder_params = create_encoder(in_lang.n_words)
+    decoder, decoder_params = create_decoder(out_lang.n_words)
+    criterion = torch.nn.NLLLoss()
 
     if torch.cuda.is_available():
-        model = model.cuda()
+        encoder = encoder.cuda()
+        decoder = decoder.cuda()
         criterion = criterion.cuda()
 
-    optimizer = torch.optim.Adam(full_params, args.lr)
-
-    train_loader, val_loader = create_data_pipeline(args)
+    encoder_optimizer = torch.optim.Adam(encoder_params, args.lr)
+    decoder_optimizer = torch.optim.Adam(decoder_params, args.lr)
 
     tuner = Tuner(
-        model,
+        encoder,
+        decoder,
+        encoder_optimizer,
+        decoder_optimizer,
         criterion,
-        optimizer, )
+        max_length=14, )
+
     if args.resume:
         if os.path.isfile(args.resume):
             tuner.restore_checkpoint(args.resume)
