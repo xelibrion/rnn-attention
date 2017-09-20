@@ -1,11 +1,10 @@
 #!/usr/bin/env python
-
 import re
-
 import pandas as pd
+import torch
 
-SOS_token = 0
-EOS_token = 1
+SOS_TOKEN = 0
+EOS_TOKEN = 1
 
 
 class Lang:
@@ -28,6 +27,9 @@ class Lang:
             self.n_words += 1
         else:
             self.word2count[word] += 1
+
+    def __getitem__(self, key):
+        return self.word2index[key]
 
 
 MAX_LENGTH = 10
@@ -68,8 +70,6 @@ def normalize_string(s):
 
 
 def get_data():
-    print("Reading lines...")
-
     df = pd.read_csv(
         '../input/rus.txt',
         sep='\t',
@@ -84,16 +84,47 @@ def get_data():
 
     df = df[build_filter(df)]
 
-    src_lang = Lang('en')
-    dst_lang = Lang('ru')
+    in_lang = Lang('en')
+    out_lang = Lang('ru')
 
     pairs = []
 
     for _, en_sent, ru_sent in df[['en', 'ru']].itertuples():
-        src_sent, dst_sent = normalize_string(en_sent), normalize_string(
+        in_sent, out_sent = normalize_string(en_sent), normalize_string(
             ru_sent)
-        pairs.append((src_sent, dst_sent))
-        src_lang.add_sentence(src_sent)
-        dst_lang.add_sentence(dst_sent)
+        pairs.append((in_sent, out_sent))
+        in_lang.add_sentence(in_sent)
+        out_lang.add_sentence(out_sent)
 
-    return src_lang, dst_lang, pairs
+    return in_lang, out_lang, pairs
+
+
+in_lang, out_lang, pairs = get_data()
+
+
+def sentence_to_indices(sentence, lang):
+    return [lang[word] for word in sentence.split(' ')] + [EOS_TOKEN]
+
+
+def pad_sequence(sequence):
+    # sequence.sort(key=lambda x: len(x), reverse=True)
+    lengths = [len(x) for x in sequence]
+    max_length = max(lengths)
+
+    for seq in sequence:
+        pad_length = max_length - len(seq)
+        if pad_length:
+            seq[:] = seq + [0] * pad_length
+    return sequence, lengths
+
+
+def to_tensor(in_lang, out_lang, pairs):
+    in_seq = [sentence_to_indices(in_text, in_lang) for in_text, _ in pairs]
+    in_padded_seq, in_lengths = pad_sequence(in_seq)
+
+    out_seq = [
+        sentence_to_indices(out_text, out_lang) for _, out_text in pairs
+    ]
+    out_padded_seq, out_lengths = pad_sequence(out_seq)
+
+    return torch.LongTensor(in_padded_seq), torch.LongTensor(out_padded_seq)
