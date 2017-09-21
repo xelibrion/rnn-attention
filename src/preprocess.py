@@ -111,7 +111,7 @@ def pad_sequence(sequence):
     for seq in sequence:
         pad_length = max_length - len(seq)
         if pad_length:
-            seq[:] = seq + [0] * pad_length
+            seq[:] = seq + [EOS_TOKEN] * pad_length
     return sequence, lengths
 
 

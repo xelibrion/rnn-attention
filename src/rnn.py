@@ -1,6 +1,6 @@
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+import torch.nn as nn
 
 
 class EncoderRNN(nn.Module):
@@ -12,8 +12,8 @@ class EncoderRNN(nn.Module):
         self.embedding = nn.Embedding(input_size, hidden_size)
         self.gru = nn.GRU(hidden_size, hidden_size)
 
-    def forward(self, input, hidden):
-        embedded = self.embedding(input).view(1, 1, -1)
+    def forward(self, inputs, hidden):
+        embedded = self.embedding(inputs).view(-1, 1, self.hidden_size)
         output = embedded
         for i in range(self.n_layers):
             output, hidden = self.gru(output, hidden)

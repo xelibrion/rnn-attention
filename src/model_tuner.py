@@ -159,6 +159,7 @@ class Tuner:
 
             loss = 0
 
+            batch_size = inputs.size(0)
             input_length = inputs.size(1)
             target_length = target.size(1)
 
@@ -166,13 +167,16 @@ class Tuner:
             target_var = as_variable(target)
 
             encoder_hidden = as_variable(self.encoder.init_hidden())
-            encoder_outputs = as_variable(
-                torch.zeros(self.max_length, self.encoder.hidden_size))
+            encoder_outputs = torch.zeros(
+                batch_size,
+                self.max_length,
+                self.encoder.hidden_size, )
+            encoder_outputs = as_variable(encoder_outputs)
 
             for ei in range(input_length):
                 encoder_output, encoder_hidden = self.encoder(
-                    input_var[0, ei], encoder_hidden)
-                encoder_outputs[ei] = encoder_output[0][0]
+                    input_var[:, ei], encoder_hidden)
+                encoder_outputs[:, ei, :] = encoder_output[:, 0]
 
             SOS_TOKEN = 0
             EOS_TOKEN = 1
@@ -193,7 +197,6 @@ class Tuner:
                 if ni == EOS_TOKEN:
                     break
 
-            batch_size = inputs.size(0)
             losses.update(loss.data[0], batch_size)
 
             self.decoder_optimizer.zero_grad()
