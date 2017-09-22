@@ -4,3 +4,4 @@
 src/logs
 /input/*.zip
 /input/*.txt
+__pycache__
