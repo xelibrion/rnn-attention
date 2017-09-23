@@ -181,23 +181,34 @@ class Tuner:
             SOS_TOKEN = 0
             EOS_TOKEN = 1
 
-            decoder_input = as_variable(torch.LongTensor([[SOS_TOKEN]]))
+            decoder_input = as_variable(
+                torch.LongTensor([[SOS_TOKEN]] * batch_size))
             decoder_hidden = encoder_hidden
 
             for di in range(target_length):
                 decoder_output, decoder_hidden = self.decoder(
                     decoder_input,
                     decoder_hidden, )
+                loss_step = self.criterion(decoder_output, target_var[:, di])
+                loss += loss_step
+
                 topv, topi = decoder_output.data.topk(1)
-                ni = topi[0][0]
+                decoder_input = as_variable(topi)
 
-                decoder_input = as_variable(torch.LongTensor([[ni]]))
+                if batch_idx == 0 and di == 2:
+                    id_v, idx = decoder_output.data.topk(5)
+                    if torch.cuda.is_available():
+                        print(target_var[:5, di].data.cpu().numpy())
+                        print(idx.cpu().numpy()[:5])
+                    else:
+                        print(target_var[:5, di].data.numpy())
+                        print(idx.numpy()[:5])
+                    print()
 
-                loss += self.criterion(decoder_output, target_var[0, di])
-                if ni == EOS_TOKEN:
+                if (topi == EOS_TOKEN).all():
                     break
 
-            losses.update(loss.data[0], batch_size)
+            losses.update(loss.data[0])
 
             self.decoder_optimizer.zero_grad()
             self.encoder_optimizer.zero_grad()
@@ -211,7 +222,7 @@ class Tuner:
 
             tq.set_postfix(
                 batch_time='{:.3f}'.format(batch_time.mavg),
-                loss='{:.3f}'.format(losses.mavg), )
+                loss='{:.3f}'.format(losses.avg), )
             tq.update()
 
             self.emit({

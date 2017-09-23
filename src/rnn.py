@@ -35,9 +35,10 @@ class DecoderRNN(nn.Module):
         self.softmax = nn.LogSoftmax()
 
     def forward(self, input, hidden):
-        output = self.embedding(input).view(1, 1, -1)
+        output = self.embedding(input)
         for i in range(self.n_layers):
             output = F.relu(output)
             output, hidden = self.gru(output, hidden)
-        output = self.softmax(self.out(output[0]))
+        output = self.softmax(self.out(output.squeeze(dim=1)))
+        output = output.squeeze(dim=1)
         return output, hidden
