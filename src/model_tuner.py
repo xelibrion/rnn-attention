@@ -1,5 +1,6 @@
 import collections
 import json
+import logging
 import os
 import shutil
 import time
@@ -7,7 +8,6 @@ from datetime import datetime
 
 import numpy as np
 import torch
-from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
 
 
@@ -56,8 +56,7 @@ class Emitter:
 
 class Tuner:
     def __init__(self,
-                 encoder,
-                 decoder,
+                 model,
                  encoder_optimizer,
                  decoder_optimizer,
                  criterion,
@@ -65,8 +64,7 @@ class Tuner:
                  epochs=200,
                  early_stopping=None,
                  tag=None):
-        self.encoder = encoder
-        self.decoder = decoder
+        self.model = model
         self.encoder_optimizer = encoder_optimizer
         self.decoder_optimizer = decoder_optimizer
         self.criterion = criterion
@@ -144,8 +142,7 @@ class Tuner:
         batch_time = AverageMeter()
         losses = AverageMeter()
 
-        self.encoder.train()
-        self.decoder.train()
+        self.model.train()
 
         tq = tqdm(total=len(train_loader))
         description = format_str.format(**locals())
@@ -157,7 +154,7 @@ class Tuner:
         for i, (inputs, target) in enumerate(train_loader):
             batch_idx += 1
 
-            loss = 0
+            # loss = 0
 
             batch_size = inputs.size(0)
             input_length = inputs.size(1)
@@ -166,47 +163,62 @@ class Tuner:
             input_var = as_variable(inputs)
             target_var = as_variable(target)
 
-            encoder_hidden = as_variable(self.encoder.init_hidden())
-            encoder_outputs = torch.zeros(
-                batch_size,
-                self.max_length,
-                self.encoder.hidden_size, )
-            encoder_outputs = as_variable(encoder_outputs)
+            outputs, hidden = self.model(input_var, target_var)
 
-            for ei in range(input_length):
-                encoder_output, encoder_hidden = self.encoder(
-                    input_var[:, ei], encoder_hidden)
-                encoder_outputs[:, ei, :] = encoder_output[:, 0]
+            # encoder_hidden = as_variable(self.encoder.init_hidden())
+            # encoder_outputs = torch.zeros(
+            #     batch_size,
+            #     self.max_length,
+            #     self.encoder.hidden_size, )
+            # encoder_outputs = as_variable(encoder_outputs)
 
-            SOS_TOKEN = 0
-            EOS_TOKEN = 1
+            # for ei in range(input_length):
+            #     encoder_output, encoder_hidden = self.encoder(
+            #         input_var[:, ei], encoder_hidden)
+            #     encoder_outputs[:, ei, :] = encoder_output[:, 0]
 
-            decoder_input = as_variable(
-                torch.LongTensor([[SOS_TOKEN]] * batch_size))
-            decoder_hidden = encoder_hidden
+            # SOS_TOKEN = 0
+            # EOS_TOKEN = 1
 
-            for di in range(target_length):
-                decoder_output, decoder_hidden = self.decoder(
-                    decoder_input,
-                    decoder_hidden, )
-                loss_step = self.criterion(decoder_output, target_var[:, di])
-                loss += loss_step
+            # decoder_input = as_variable(
+            #     torch.LongTensor([[SOS_TOKEN]] * batch_size))
+            # decoder_hidden = encoder_hidden
 
-                topv, topi = decoder_output.data.topk(1)
-                decoder_input = as_variable(topi)
+            # for di in range(target_length):
+            #     decoder_output, decoder_hidden = self.decoder(
+            #         decoder_input,
+            #         decoder_hidden, )
+            #     loss_step = self.criterion(decoder_output, target_var[:, di])
+            #     loss += loss_step
 
-                if batch_idx == 0 and di == 2:
-                    id_v, idx = decoder_output.data.topk(5)
-                    if torch.cuda.is_available():
-                        print(target_var[:5, di].data.cpu().numpy())
-                        print(idx.cpu().numpy()[:5])
-                    else:
-                        print(target_var[:5, di].data.numpy())
-                        print(idx.numpy()[:5])
-                    print()
+            #     topv, topi = decoder_output.data.topk(1)
+            #     decoder_input = as_variable(topi)
 
-                if (topi == EOS_TOKEN).all():
-                    break
+            #     if batch_idx == 0 and di == 2:
+            #         id_v, idx = decoder_output.data.topk(5)
+            #         if torch.cuda.is_available():
+            #             print(target_var[:5, di].data.cpu().numpy())
+            #             print(idx.cpu().numpy()[:5])
+            #         else:
+            #             print(target_var[:5, di].data.numpy())
+            #             print(idx.numpy()[:5])
+            #         print()
+
+            #     if (topi == EOS_TOKEN).all():
+            #         break
+
+            # top_value, top_idx = outputs.data.topk(1)
+
+            log = logging.getLogger()
+            log.debug(outputs.size())
+            log.debug(target_var.size())
+
+            loss_by_sent = [
+                self.criterion(outputs[i], target_var[i])
+                for i in range(batch_size)
+            ]
+
+            loss = sum(loss_by_sent)
 
             losses.update(loss.data[0])
 

@@ -2,17 +2,19 @@
 
 import argparse
 import os
+from pathlib import Path
 
 import torch
 import torch.backends.cudnn as cudnn
 import torch.nn.parallel
 import torch.optim
 import torch.utils.data
+from sklearn.externals import joblib
+from sklearn.model_selection import train_test_split
 
 from model_tuner import Tuner
 from preprocess import get_pairs, to_numpy_tensor_pair
-from sklearn.model_selection import train_test_split
-from rnn import EncoderRNN, DecoderRNN
+from rnn import Seq2SeqModel
 
 
 def define_args():
@@ -77,20 +79,23 @@ def define_args():
 HIDDEN_SIZE = 256
 
 
-def create_encoder(in_vocabulary_size):
-    model = EncoderRNN(in_vocabulary_size, HIDDEN_SIZE)
-    return model, model.parameters()
-
-
-def create_decoder(out_vocabulary_size):
-    model = DecoderRNN(HIDDEN_SIZE, out_vocabulary_size)
-    return model, model.parameters()
+def create_model(in_vocabulary_size, out_vocabulary_size):
+    model = Seq2SeqModel(
+        in_vocabulary_size,
+        HIDDEN_SIZE,
+        out_vocabulary_size, )
+    return model, model.encoder.parameters(), model.decoder.parameters()
 
 
 def create_data_pipeline(args):
     print("Loading data")
 
-    in_lang, out_lang, pairs = get_pairs()
+    if Path('./data.pkl').exists():
+        in_lang, out_lang, pairs = joblib.load('./data.pkl')
+    else:
+        in_lang, out_lang, pairs = get_pairs()
+        joblib.dump((in_lang, out_lang, pairs), './data.pkl')
+
     X, y = to_numpy_tensor_pair(in_lang, out_lang, pairs)
 
     X_train, X_test, y_train, y_test = train_test_split(
@@ -130,21 +135,20 @@ def main():
 
     train_loader, val_loader, in_lang, out_lang = create_data_pipeline(args)
 
-    encoder, encoder_params = create_encoder(in_lang.n_words)
-    decoder, decoder_params = create_decoder(out_lang.n_words)
+    model, encoder_params, decoder_params = create_model(
+        in_lang.n_words, out_lang.n_words)
     criterion = torch.nn.NLLLoss()
 
     if torch.cuda.is_available():
-        encoder = encoder.cuda()
-        decoder = decoder.cuda()
+        model = model.cuda()
+        # decoder = decoder.cuda()
         criterion = criterion.cuda()
 
     encoder_optimizer = torch.optim.Adam(encoder_params, args.lr)
     decoder_optimizer = torch.optim.Adam(decoder_params, args.lr)
 
     tuner = Tuner(
-        encoder,
-        decoder,
+        model,
         encoder_optimizer,
         decoder_optimizer,
         criterion,
