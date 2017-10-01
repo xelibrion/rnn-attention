@@ -2,12 +2,9 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 import logging
-import sys
-# sys.tracebacklimit = 3
+from tokens import SOS_TOKEN
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
-
-SOS_TOKEN = 0
 
 log = logging.getLogger()
 

@@ -2,9 +2,7 @@
 import re
 import numpy as np
 import pandas as pd
-
-SOS_TOKEN = 0
-EOS_TOKEN = 1
+from tokens import SOS_TOKEN, EOS_TOKEN, PAD_TOKEN
 
 
 class Lang:
@@ -12,8 +10,12 @@ class Lang:
         self.name = name
         self.word2index = {}
         self.word2count = {}
-        self.index2word = {0: "SOS", 1: "EOS"}
-        self.n_words = 2  # Count SOS and EOS
+        self.index2word = {}
+        self.index2word[SOS_TOKEN] = "<start>"
+        self.index2word[EOS_TOKEN] = "<end>"
+        self.index2word[PAD_TOKEN] = "<pad>"
+
+        self.n_words = len(self.index2word)
 
     def add_sentence(self, sentence):
         for word in sentence.split(' '):
@@ -111,7 +113,7 @@ def pad_sequence(sequence):
     for seq in sequence:
         pad_length = max_length - len(seq)
         if pad_length:
-            seq[:] = seq + [EOS_TOKEN] * pad_length
+            seq[:] = seq + [PAD_TOKEN] * pad_length
     return sequence, lengths
 
 
