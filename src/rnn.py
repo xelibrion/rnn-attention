@@ -4,8 +4,6 @@ import torch.nn as nn
 import logging
 from tokens import SOS_TOKEN
 
-logging.basicConfig(level=logging.INFO, format="%(message)s")
-
 log = logging.getLogger()
 
 

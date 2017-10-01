@@ -15,6 +15,7 @@ from sklearn.model_selection import train_test_split
 from model_tuner import Tuner
 from preprocess import get_pairs, to_numpy_tensor_pair
 from rnn import Seq2SeqModel
+import logging
 
 
 def define_args():
@@ -28,6 +29,12 @@ def define_args():
         type=int,
         metavar='N',
         help='number of data loading workers (default: 4)')
+
+    parser.add_argument(
+        '-d',
+        '--debug',
+        action='store_true',
+        help='enables debug mode', )
 
     parser.add_argument(
         '--epochs',
@@ -130,6 +137,9 @@ def create_data_pipeline(args):
 def main():
     parser = define_args()
     args = parser.parse_args()
+
+    if args.debug:
+        logging.basicConfig(level=logging.DEBUG, format="%(message)s")
 
     cudnn.benchmark = True
 
