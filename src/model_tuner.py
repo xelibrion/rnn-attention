@@ -202,7 +202,7 @@ class Tuner:
                 for i in range(batch_size)
             ]
 
-            loss = sum(loss_by_sent)
+            loss = sum(loss_by_sent) / batch_size
 
             losses.update(loss.data[0])
 
