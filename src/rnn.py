@@ -34,12 +34,12 @@ class Seq2SeqModel(nn.Module):
         encoder_output, encoder_hidden = self.encoder(inputs, encoder_hidden)
 
         decoder_input = targets
-        decoder_hidden = encoder_hidden[-1, -1, :].repeat(
-            1, targets.size(1), 1)
+        decoder_hidden = encoder_hidden[:, -1:, :]
         log.debug("Decoder hidden [Seq2Seq]: %s", decoder_hidden.size())
 
-        decoder_output, decoder_hidden = self.decoder(decoder_input,
-                                                      decoder_hidden)
+        decoder_output, decoder_hidden = self.decoder(decoder_hidden,
+                                                      inputs.size(0),
+                                                      targets.size(1))
         return decoder_output, decoder_hidden
 
     def init_hidden(self):
@@ -89,21 +89,43 @@ class DecoderRNN(nn.Module):
         self.out = nn.Linear(hidden_size, output_size)
         self.softmax = nn.LogSoftmax()
 
-    def forward(self, inputs, hidden):
-        log.debug("Decoder inputs: %s", inputs.size())
-        log.debug("Decoder hidden: %s", hidden.size())
+    def _forward_step(self, inputs, hidden):
+
+        log.debug("Decoder _forward_step inputs: %s", inputs.size())
+        log.debug("Decoder _forward_step hidden: %s", hidden.size())
+
         output = self.embedding(inputs)
-        log.debug("Decoder embeddings: %s", output.size())
-        # for i in range(self.n_layers):
+        log.debug("Decoder _forward_step embeddings: %s", output.size())
 
         output = F.relu(output)
         output, hidden = self.gru(output, hidden)
 
-        log.debug("Decoder RNN output: %s", output.size())
+        log.debug("Decoder _forward_step RNN output: %s", output.size())
 
         output = self.softmax(self.out(output.squeeze(dim=1)))
 
-        log.debug("Decoder softmax output: %s", output.size())
+        log.debug("Decoder _forward_step softmax output: %s", output.size())
 
         output = output.squeeze(dim=1)
+        log.debug("Decoder _forward_step output: %s", output.size())
+
         return output, hidden
+
+    def forward(self, hidden, batch_size, max_length):
+
+        inputs = torch.LongTensor([SOS_TOKEN]).repeat(batch_size, 1)
+        inputs = as_variable(inputs)
+
+        outputs = []
+
+        for step in range(max_length):
+            output, hidden = self._forward_step(inputs, hidden)
+
+            outputs.append(output.unsqueeze(1))
+            _, next_word_idx = output.max(dim=1)
+            inputs = next_word_idx.unsqueeze(1)
+
+        outputs = torch.cat(outputs, dim=1)
+        log.debug("Decoder forward output: %s", outputs.size())
+
+        return outputs, hidden
