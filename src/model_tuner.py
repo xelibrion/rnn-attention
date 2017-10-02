@@ -143,7 +143,7 @@ class Tuner:
     def show_sample(self, inputs, target, outputs):
         log = logging.getLogger()
 
-        for ex_id in range(3):
+        for ex_id in range(min(7, inputs.size(0))):
 
             in_words = [self.in_lang[(w_id, 'word')] for w_id in inputs[ex_id]]
             in_sent = ' '.join(in_words)
@@ -202,7 +202,7 @@ class Tuner:
                 for i in range(batch_size)
             ]
 
-            loss = sum(loss_by_sent) / batch_size
+            loss = torch.cat(loss_by_sent).mean()
 
             losses.update(loss.data[0])
 
