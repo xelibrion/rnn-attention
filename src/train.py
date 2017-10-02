@@ -140,6 +140,8 @@ def main():
 
     if args.debug:
         logging.basicConfig(level=logging.DEBUG, format="%(message)s")
+    else:
+        logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     cudnn.benchmark = True
 
@@ -162,7 +164,8 @@ def main():
         encoder_optimizer,
         decoder_optimizer,
         criterion,
-        max_length=14, )
+        in_lang,
+        out_lang, )
 
     if args.resume:
         if os.path.isfile(args.resume):

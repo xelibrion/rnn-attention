@@ -60,7 +60,8 @@ class Tuner:
                  encoder_optimizer,
                  decoder_optimizer,
                  criterion,
-                 max_length,
+                 in_lang,
+                 out_lang,
                  epochs=200,
                  early_stopping=None,
                  tag=None):
@@ -71,7 +72,8 @@ class Tuner:
         self.epochs = epochs
         self.early_stopping = early_stopping
         self.start_epoch = 0
-        self.max_length = max_length
+        self.in_lang = in_lang
+        self.out_lang = out_lang
         self.best_score = -float('Inf')
         self.tag = tag
         self.h_state = None
@@ -138,6 +140,29 @@ class Tuner:
 
             # self.save_checkpoint(val_score, epoch)
 
+    def show_sample(self, inputs, target, outputs):
+        log = logging.getLogger()
+
+        for ex_id in range(3):
+
+            in_words = [self.in_lang[(w_id, 'word')] for w_id in inputs[ex_id]]
+            in_sent = ' '.join(in_words)
+            target_words = [
+                self.out_lang[(w_id, 'word')] for w_id in target[ex_id]
+            ]
+            target_sent = ' '.join(target_words)
+
+            _, pred_idx = outputs.max(dim=2)
+
+            pred_words = [
+                self.out_lang[(w_id, 'word')] for w_id in pred_idx.data[ex_id]
+            ]
+            pred_sent = ' '.join(pred_words)
+
+            log.info(in_sent)
+            log.info(target_sent)
+            log.info("%s\n", pred_sent)
+
     def train_epoch(self, train_loader, epoch, stage, format_str):
         batch_time = AverageMeter()
         losses = AverageMeter()
@@ -154,8 +179,6 @@ class Tuner:
         for i, (inputs, target) in enumerate(train_loader):
             batch_idx += 1
 
-            # loss = 0
-
             batch_size = inputs.size(0)
             input_length = inputs.size(1)
             target_length = target.size(1)
@@ -165,53 +188,14 @@ class Tuner:
 
             outputs, hidden = self.model(input_var, target_var)
 
-            # encoder_hidden = as_variable(self.encoder.init_hidden())
-            # encoder_outputs = torch.zeros(
-            #     batch_size,
-            #     self.max_length,
-            #     self.encoder.hidden_size, )
-            # encoder_outputs = as_variable(encoder_outputs)
-
-            # for ei in range(input_length):
-            #     encoder_output, encoder_hidden = self.encoder(
-            #         input_var[:, ei], encoder_hidden)
-            #     encoder_outputs[:, ei, :] = encoder_output[:, 0]
-
-            # SOS_TOKEN = 0
-            # EOS_TOKEN = 1
-
-            # decoder_input = as_variable(
-            #     torch.LongTensor([[SOS_TOKEN]] * batch_size))
-            # decoder_hidden = encoder_hidden
-
-            # for di in range(target_length):
-            #     decoder_output, decoder_hidden = self.decoder(
-            #         decoder_input,
-            #         decoder_hidden, )
-            #     loss_step = self.criterion(decoder_output, target_var[:, di])
-            #     loss += loss_step
-
-            #     topv, topi = decoder_output.data.topk(1)
-            #     decoder_input = as_variable(topi)
-
-            #     if batch_idx == 0 and di == 2:
-            #         id_v, idx = decoder_output.data.topk(5)
-            #         if torch.cuda.is_available():
-            #             print(target_var[:5, di].data.cpu().numpy())
-            #             print(idx.cpu().numpy()[:5])
-            #         else:
-            #             print(target_var[:5, di].data.numpy())
-            #             print(idx.numpy()[:5])
-            #         print()
-
-            #     if (topi == EOS_TOKEN).all():
-            #         break
-
-            # top_value, top_idx = outputs.data.topk(1)
-
             log = logging.getLogger()
-            log.debug(outputs.size())
-            log.debug(target_var.size())
+            log.debug(
+                "Computing loss: prediction %s, target %s",
+                outputs.size(),
+                target_var.data.size(), )
+
+            if batch_idx == 0:
+                self.show_sample(inputs, target, outputs)
 
             loss_by_sent = [
                 self.criterion(outputs[i], target_var[i])

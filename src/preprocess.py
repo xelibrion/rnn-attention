@@ -31,6 +31,11 @@ class Lang:
             self.word2count[word] += 1
 
     def __getitem__(self, key):
+        key, direction = key
+
+        if direction == 'word':
+            return self.index2word[key]
+
         return self.word2index[key]
 
 
@@ -102,7 +107,7 @@ def get_pairs():
 
 
 def sentence_to_indices(sentence, lang):
-    return [lang[word] for word in sentence.split(' ')] + [EOS_TOKEN]
+    return [lang[(word, 'id')] for word in sentence.split(' ')] + [EOS_TOKEN]
 
 
 def pad_sequence(sequence):
