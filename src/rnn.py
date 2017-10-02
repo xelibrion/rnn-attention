@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 import logging
-from tokens import SOS_TOKEN
+from tokens import SOS_TOKEN, PAD_TOKEN
 
 log = logging.getLogger()
 
@@ -29,7 +29,7 @@ class Seq2SeqModel(nn.Module):
 
     def forward(self, inputs, targets=None, encoder_hidden=None):
         if not encoder_hidden:
-            encoder_hidden = self.init_hidden()
+            encoder_hidden = self.init_hidden(inputs.size(0))
 
         encoder_output, encoder_hidden = self.encoder(inputs, encoder_hidden)
 
@@ -42,8 +42,8 @@ class Seq2SeqModel(nn.Module):
                                                       targets.size(1))
         return decoder_output, decoder_hidden
 
-    def init_hidden(self):
-        return as_variable(torch.zeros(1, 14, self.hidden_size))
+    def init_hidden(self, batch_size):
+        return as_variable(torch.zeros(1, batch_size, self.hidden_size))
 
 
 class EncoderRNN(nn.Module):
@@ -59,21 +59,32 @@ class EncoderRNN(nn.Module):
         log.debug("Encoder inputs: %s", inputs.size())
         log.debug("Encoder hidden: %s", hidden.size())
 
+        lengths = inputs.data.ne(PAD_TOKEN).long().sum(1).squeeze()
+        _, idx_sort = torch.sort(lengths, dim=0, descending=True)
+        _, idx_unsort = torch.sort(idx_sort, dim=0)
+
+        lengths = list(lengths[idx_sort])
+        idx_sort = as_variable(idx_sort)
+        idx_unsort = as_variable(idx_unsort)
+
         embedded = self.embedding(inputs)
         log.debug("Encoder embeddings: %s", embedded.size())
 
-        # embedded = nn.utils.rnn.pack_padded_sequence(
-        #     embedded, input_lengths, batch_first=True)
-        # output, hidden = self.rnn(embedded)
+        # Sort x
+        inputs_sorted = embedded.index_select(0, idx_sort)
+        # (B,L,D) -> (L,B,D)
+        inputs_sorted = inputs_sorted.transpose(0, 1)
 
-        output = embedded
-        # for i in range(self.n_layers):
-        output, hidden = self.gru(output, hidden)
+        # Pack it up
+        packed = nn.utils.rnn.pack_padded_sequence(inputs_sorted, lengths)
+        packed_out, packed_hidden = self.gru(packed, hidden)
 
-        log.debug("Encoder hidden: %s", hidden.size())
+        output, _ = nn.utils.rnn.pad_packed_sequence(packed_out)
+
+        hidden = packed_hidden
+        log.debug("Encoder hidden: %s", packed_hidden.size())
         log.debug(hidden.data)
         log.debug("Encoder output: %s\n", output.size())
-        # output, _ = nn.utils.rnn.pad_packed_sequence(output, batch_first=True)
 
         return output, hidden
 
