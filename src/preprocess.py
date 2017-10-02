@@ -54,6 +54,8 @@ eng_prefixes = [
     "we re ",
     "they are",
     "they re ",
+    "look",
+    "let ",
 ]
 
 
@@ -72,7 +74,7 @@ def normalize_string(s):
     s = s.strip()
     # add spaces between punctunation
     s = re.sub(r"([.!?])", r" \1", s)
-    s = re.sub(r"[^a-zа-я.!?]+", r" ", s)
+    s = re.sub(r"[^a-zа-яё.!?]+", r" ", s)
     return s
 
 
