@@ -39,7 +39,7 @@ class Lang:
         return self.word2index[key]
 
 
-MAX_LENGTH = 10
+MAX_LENGTH = 6
 
 eng_prefixes = [
     "i am ",
@@ -54,8 +54,6 @@ eng_prefixes = [
     "we re ",
     "they are",
     "they re ",
-    "look",
-    "let ",
 ]
 
 

@@ -34,7 +34,7 @@ class Seq2SeqModel(nn.Module):
         encoder_output, encoder_hidden = self.encoder(inputs, encoder_hidden)
 
         decoder_input = targets
-        decoder_hidden = encoder_hidden[:, -1:, :]
+        decoder_hidden = encoder_hidden[-1:, -1:, :]
         log.debug("Decoder hidden [Seq2Seq]: %s", decoder_hidden.size())
 
         decoder_output, decoder_hidden = self.decoder(decoder_hidden,
@@ -43,7 +43,7 @@ class Seq2SeqModel(nn.Module):
         return decoder_output, decoder_hidden
 
     def init_hidden(self, batch_size):
-        return as_variable(torch.zeros(1, batch_size, self.hidden_size))
+        return as_variable(torch.zeros(2, batch_size, self.hidden_size))
 
 
 class EncoderRNN(nn.Module):
@@ -53,7 +53,7 @@ class EncoderRNN(nn.Module):
         self.hidden_size = hidden_size
 
         self.embedding = nn.Embedding(input_size, hidden_size)
-        self.gru = nn.GRU(hidden_size, hidden_size)
+        self.gru = nn.GRU(hidden_size, hidden_size, bidirectional=True)
 
     def forward(self, inputs, hidden):
         log.debug("Encoder inputs: %s", inputs.size())
