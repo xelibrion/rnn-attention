@@ -122,8 +122,10 @@ class DecoderRNN(nn.Module):
             output, hidden = self._forward_step(inputs, hidden)
 
             outputs.append(output.unsqueeze(1))
+
             _, next_word_idx = output.max(dim=1)
             inputs = next_word_idx.unsqueeze(1)
+            hidden = as_variable(hidden.data)
 
         outputs = torch.cat(outputs, dim=1)
         log.debug("Decoder forward output: %s", outputs.size())
