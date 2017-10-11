@@ -56,7 +56,7 @@ class EncoderRNN(nn.Module):
         self.gru = nn.GRU(hidden_size, hidden_size, bidirectional=True)
 
     def forward(self, inputs, hidden):
-        log.debug("Encoder inputs: %s", inputs.size())
+        log.debug("\n\nEncoder inputs: %s", inputs.size())
         log.debug("Encoder hidden: %s", hidden.size())
 
         lengths = inputs.data.ne(PAD_TOKEN).long().sum(1).squeeze()
@@ -72,18 +72,21 @@ class EncoderRNN(nn.Module):
 
         # Sort x
         inputs_sorted = embedded.index_select(0, idx_sort)
-        # (B,L,D) -> (L,B,D)
+        # B x S x C -> S x B x C
         inputs_sorted = inputs_sorted.transpose(0, 1)
 
-        # Pack it up
-        packed = nn.utils.rnn.pack_padded_sequence(inputs_sorted, lengths)
-        packed_out, packed_hidden = self.gru(packed, hidden)
+        # NOTE: this will change S output dimension
+        # to length of the longest sequence
+        # packed = nn.utils.rnn.pack_padded_sequence(inputs_sorted, lengths)
+        # packed_out, packed_hidden = self.gru(packed, hidden)
 
-        output, _ = nn.utils.rnn.pad_packed_sequence(packed_out)
+        # output, _ = nn.utils.rnn.pad_packed_sequence(packed_out)
+
+        packed_out, packed_hidden = self.gru(embedded.transpose(0, 1), hidden)
+        output = packed_out
 
         hidden = packed_hidden
         log.debug("Encoder hidden: %s", packed_hidden.size())
-        log.debug(hidden.data)
         log.debug("Encoder output: %s\n", output.size())
 
         return output, hidden
