@@ -138,10 +138,12 @@ def main():
     parser = define_args()
     args = parser.parse_args()
 
+    log_fmt = "%(name)s | %(message)s"
+
     if args.debug:
-        logging.basicConfig(level=logging.DEBUG, format="%(message)s")
+        logging.basicConfig(level=logging.DEBUG, format=log_fmt)
     else:
-        logging.basicConfig(level=logging.INFO, format="%(message)s")
+        logging.basicConfig(level=logging.INFO, format=log_fmt)
 
     cudnn.benchmark = True
 

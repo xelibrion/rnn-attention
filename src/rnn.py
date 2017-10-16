@@ -1,17 +1,30 @@
+import functools
+import logging
+import pdb
+
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
-import logging
-from tokens import SOS_TOKEN, PAD_TOKEN
-import pdb
 
-log = logging.getLogger()
+from tokens import PAD_TOKEN, SOS_TOKEN
 
 
 def as_variable(tensor, volatile=False):
     if torch.cuda.is_available():
         tensor = tensor.cuda(async=True)
     return torch.autograd.Variable(tensor, volatile=volatile)
+
+
+def inject_log(class_name):
+    def inject_log_core(func):
+        @functools.wraps(func)
+        def wrapped_func(*args):
+            log = logging.getLogger(f'{class_name}.{func.__name__}')
+            return func(*args, log)
+
+        return wrapped_func
+
+    return inject_log_core
 
 
 class Seq2SeqModel(nn.Module):
@@ -36,7 +49,9 @@ class Seq2SeqModel(nn.Module):
         encoder_outputs, encoder_hidden = self.encoder(inputs, encoder_hidden)
 
         decoder_hidden = torch.cat(encoder_hidden, 1).unsqueeze(0)
-        log.debug("Decoder hidden [Seq2Seq]: %s", decoder_hidden.size())
+
+        log = logging.getLogger(self.__class__.__name__)
+        log.debug("Decoder hidden: %s", decoder_hidden.size())
 
         decoder_output, decoder_hidden = self.decoder(decoder_hidden,
                                                       encoder_outputs)
@@ -55,9 +70,10 @@ class EncoderRNN(nn.Module):
         self.embedding = nn.Embedding(input_size, hidden_size)
         self.gru = nn.GRU(hidden_size, hidden_size, bidirectional=True)
 
-    def forward(self, inputs, hidden):
-        log.debug("\n\nEncoder inputs: %s", inputs.size())
-        log.debug("Encoder hidden: %s", hidden.size())
+    @inject_log('EncoderRNN')
+    def forward(self, inputs, hidden, log):
+        log.debug("\n\ninputs: %s", inputs.size())
+        log.debug("hidden: %s", hidden.size())
 
         lengths = inputs.data.ne(PAD_TOKEN).long().sum(1).squeeze()
         _, idx_sort = torch.sort(lengths, dim=0, descending=True)
@@ -68,7 +84,7 @@ class EncoderRNN(nn.Module):
         idx_unsort = as_variable(idx_unsort)
 
         embedded = self.embedding(inputs)
-        log.debug("Encoder embeddings: %s", embedded.size())
+        log.debug("embeddings: %s", embedded.size())
 
         # Sort x
         inputs_sorted = embedded.index_select(0, idx_sort)
@@ -86,8 +102,8 @@ class EncoderRNN(nn.Module):
         output = packed_out
 
         hidden = packed_hidden
-        log.debug("Encoder hidden: %s", packed_hidden.size())
-        log.debug("Encoder output: %s\n", output.size())
+        log.debug("hidden: %s", packed_hidden.size())
+        log.debug("output: %s\n", output.size())
 
         return output, hidden
 
@@ -103,7 +119,8 @@ class DecoderRNN(nn.Module):
         self.out = nn.Linear(hidden_size, output_size)
         self.softmax = nn.LogSoftmax()
 
-    def _forward_step(self, inputs, hidden):
+    @inject_log('DecoderRNN')
+    def _forward_step(self, inputs, hidden, log):
 
         log.debug("Decoder _forward_step inputs: %s", inputs.size())
         log.debug("Decoder _forward_step hidden: %s", hidden.size())
@@ -125,7 +142,8 @@ class DecoderRNN(nn.Module):
 
         return output, hidden
 
-    def forward(self, hidden, batch_size, target_length):
+    @inject_log('DecoderRNN')
+    def forward(self, hidden, batch_size, target_length, log):
 
         inputs = torch.LongTensor([SOS_TOKEN]).repeat(batch_size, 1)
         inputs = as_variable(inputs)
@@ -166,7 +184,8 @@ class AttentionLayer(nn.Module):
             self.attn = nn.Linear(self.hidden_size * 2, hidden_size)
             self.other = nn.Parameter(torch.FloatTensor(1, hidden_size))
 
-    def forward(self, hidden, encoder_outputs):
+    @inject_log('AttentionLayer')
+    def forward(self, hidden, encoder_outputs, log):
         seq_len = encoder_outputs.size(0)
         batch_size = encoder_outputs.size(1)
 
@@ -175,8 +194,7 @@ class AttentionLayer(nn.Module):
         attn_energies = as_variable(
             torch.zeros(batch_size, seq_len).unsqueeze(1))
 
-        log.debug("AttentionLayer.attn_energies: %s",
-                  attn_energies.data.size())
+        log.debug("attn_energies: %s", attn_energies.data.size())
 
         # Calculate energies for each encoder output
         for i in range(seq_len):
@@ -186,16 +204,14 @@ class AttentionLayer(nn.Module):
         # resize to B x 1 x S
         return F.softmax(attn_energies)
 
-    def score(self, hidden, encoder_output):
+    @inject_log('AttentionLayer')
+    def score(self, hidden, encoder_output, log):
         """
         Returns attention score for a particular encoded token.
         Outputs: energy, a vector of size B x 1
         """
-        log.debug("AttentionLayer.score[hidden]: %s", hidden.size())
-        log.debug("AttentionLayer.score[encoder_output]: %s",
-                  encoder_output.size())
-
-        # pdb.set_trace()
+        log.debug("hidden: %s", hidden.size())
+        log.debug("encoder_output: %s", encoder_output.size())
 
         if self.method == 'dot':
             energy = torch.bmm(
@@ -237,8 +253,9 @@ class AttnDecoderRNN(nn.Module):
 
         self.attn = AttentionLayer(attn_model, hidden_size)
 
+    @inject_log('AttnDecoderRNN')
     def _forward_step(self, word_input, last_context, last_hidden,
-                      encoder_outputs):
+                      encoder_outputs, log):
         # Note: we run this one step at a time
 
         batch_size = encoder_outputs.size(1)
@@ -246,25 +263,23 @@ class AttnDecoderRNN(nn.Module):
         # Get the embedding of the current input word (last output word)
         # 1 x B x N
         word_embedded = self.embedding(word_input).view(1, batch_size, -1)
-        log.debug("AttnDecoderRNN._forward_step[word_embedded]: %s",
-                  word_embedded.size())
+        log.debug(self.__class__.__name__)
+        log.debug("word_embedded: %s", word_embedded.size())
+        log.debug("last_context: %s", last_context.size())
 
         # Combine embedded input word and last context, run through RNN
         rnn_input = torch.cat((word_embedded, last_context.unsqueeze(0)), 2)
-        log.debug(
-            "AttnDecoderRNN._forward_step: rnn_input = %s, last_hidden = %s",
-            rnn_input.size(), last_hidden.size())
+        log.debug("rnn_input = %s, last_hidden = %s",
+                  rnn_input.size(), last_hidden.size())
         rnn_output, hidden = self.gru(rnn_input, last_hidden)
-        log.debug("AttnDecoderRNN._forward_step: rnn_output = %s, hidden = %s",
+        log.debug("rnn_output = %s, hidden = %s",
                   rnn_output.size(), hidden.size())
 
         # Calculate attention from current RNN state and all encoder outputs;
         # apply to encoder outputs
         attn_weights = self.attn(rnn_output.squeeze(0), encoder_outputs)
-        log.debug("AttnDecoderRNN._forward_step[attn_weights]: %s",
-                  attn_weights.size())
+        log.debug("attn_weights: %s", attn_weights.size())
 
-        pdb.set_trace()
         # B x 1 x N
         context = attn_weights.bmm(encoder_outputs.transpose(0, 1))
 
@@ -274,25 +289,24 @@ class AttnDecoderRNN(nn.Module):
         rnn_output = rnn_output.squeeze(0)
         # B x S=1 x N -> B x N
         context = context.squeeze(1)
-        log.debug("AttnDecoderRNN._forward_step[rnn_output]: %s",
-                  rnn_output.size())
+        log.debug("rnn_output: %s", rnn_output.size())
 
-        log.debug("AttnDecoderRNN._forward_step[context]: %s", context.size())
+        log.debug("context: %s", context.size())
 
         output = F.log_softmax(self.out(torch.cat((rnn_output, context), 1)))
 
         return output, context, hidden, attn_weights
 
-    def forward(self, hidden, encoder_outputs):
+    @inject_log("AttnDecoderRNN")
+    def forward(self, hidden, encoder_outputs, log):
 
-        log.debug("AttnDecoderRNN: encoder_outputs %s", encoder_outputs.size())
+        log.debug("encoder_outputs %s", encoder_outputs.size())
 
         batch_size = encoder_outputs.size(1)
         target_length = encoder_outputs.size(0)
 
-        log.debug(
-            "AttnDecoderRNN parameters: batch_size = %d, target_length = %d",
-            batch_size, target_length)
+        log.debug("batch_size = %d, target_length = %d", batch_size,
+                  target_length)
 
         inputs = torch.LongTensor([SOS_TOKEN]).repeat(batch_size, 1)
         inputs = as_variable(inputs)
@@ -314,12 +328,10 @@ class AttnDecoderRNN(nn.Module):
             inputs = next_word_idx.unsqueeze(1)
             hidden = as_variable(hidden.data)
 
-        log.debug(
-            "Decoder forward outputs: length = %d, size = %s",
-            len(outputs),
-            outputs[0].size(), )
+        log.debug("outputs: length = %d, size = %s",
+                  len(outputs), outputs[0].size())
 
         outputs = torch.cat(outputs, dim=1)
-        log.debug("Decoder forward output: %s", outputs.size())
+        log.debug("output: %s", outputs.size())
 
         return outputs, hidden
