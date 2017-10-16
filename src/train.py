@@ -151,7 +151,7 @@ def main():
 
     model, encoder_params, decoder_params = create_model(
         in_lang.n_words, out_lang.n_words)
-    criterion = torch.nn.NLLLoss()
+    criterion = torch.nn.NLLLoss2d()
 
     if torch.cuda.is_available():
         model = model.cuda()

@@ -152,10 +152,11 @@ class Tuner:
             ]
             target_sent = ' '.join(target_words)
 
-            _, pred_idx = outputs.max(dim=2)
+            _, pred_idx = outputs.max(dim=1)
 
             pred_words = [
-                self.out_lang[(w_id, 'word')] for w_id in pred_idx.data[ex_id]
+                self.out_lang[(w_id, 'word')]
+                for w_id in pred_idx.data.squeeze()[ex_id]
             ]
             pred_sent = ' '.join(pred_words)
 
@@ -184,9 +185,10 @@ class Tuner:
             target_length = target.size(1)
 
             input_var = as_variable(inputs)
-            target_var = as_variable(target)
+            target_var = as_variable(target.unsqueeze(2))
 
             outputs, hidden = self.model(input_var, target_var)
+            outputs = outputs.unsqueeze(3).transpose(1, 2)
 
             log = logging.getLogger()
             log.debug(
@@ -197,12 +199,7 @@ class Tuner:
             if batch_idx == 0:
                 self.show_sample(inputs, target, outputs)
 
-            loss_by_sent = [
-                self.criterion(outputs[i], target_var[i])
-                for i in range(batch_size)
-            ]
-
-            loss = torch.cat(loss_by_sent).mean()
+            loss = self.criterion(outputs, target_var)
 
             losses.update(loss.data[0])
 
