@@ -39,7 +39,7 @@ class Seq2SeqModel(nn.Module):
         self.hidden_size = hidden_size
 
         self.encoder = EncoderRNN(input_size, hidden_size, encoder_layers)
-        self.decoder = AttnDecoderRNN(hidden_size, output_size, 'dot',
+        self.decoder = AttnDecoderRNN(hidden_size * 2, output_size, 'dot',
                                       decoder_layers)
 
     def forward(self, inputs, targets=None, encoder_hidden=None):
@@ -248,8 +248,8 @@ class AttnDecoderRNN(nn.Module):
         # Define layers
         self.embedding = nn.Embedding(output_size, hidden_size)
         self.gru = nn.GRU(
-            hidden_size * 2, hidden_size * 2, n_layers, dropout=dropout_p)
-        self.out = nn.Linear(hidden_size * 4, output_size)
+            hidden_size * 2, hidden_size, n_layers, dropout=dropout_p)
+        self.out = nn.Linear(hidden_size * 2, output_size)
 
         self.attn = AttentionLayer(attn_model, hidden_size)
 
@@ -287,10 +287,9 @@ class AttnDecoderRNN(nn.Module):
         # using the RNN hidden state and context vector
         # 1 x B x N -> B x N
         rnn_output = rnn_output.squeeze(0)
-        # B x S=1 x N -> B x N
+        # B x 1 x N -> B x N
         context = context.squeeze(1)
         log.debug("rnn_output: %s", rnn_output.size())
-
         log.debug("context: %s", context.size())
 
         output = F.log_softmax(self.out(torch.cat((rnn_output, context), 1)))
@@ -303,7 +302,7 @@ class AttnDecoderRNN(nn.Module):
         log.debug("encoder_outputs %s", encoder_outputs.size())
 
         batch_size = encoder_outputs.size(1)
-        target_length = encoder_outputs.size(0)
+        target_length = 9
 
         log.debug("batch_size = %d, target_length = %d", batch_size,
                   target_length)
