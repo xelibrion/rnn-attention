@@ -3,6 +3,7 @@
 import argparse
 import os
 from pathlib import Path
+import logging
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -15,7 +16,6 @@ from sklearn.model_selection import train_test_split
 from model_tuner import Tuner
 from preprocess import get_pairs, to_numpy_tensor_pair
 from rnn import Seq2SeqModel
-import logging
 
 
 def define_args():
@@ -91,6 +91,7 @@ def create_model(in_vocabulary_size, out_vocabulary_size):
         in_vocabulary_size,
         HIDDEN_SIZE,
         out_vocabulary_size, )
+
     return model, model.encoder.parameters(), model.decoder.parameters()
 
 

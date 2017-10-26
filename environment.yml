@@ -4,6 +4,7 @@ channels:
 - soumith
 dependencies:
 - flake8
+- pylint
 - ipython
 - jupyter
 - matplotlib
